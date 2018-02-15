@@ -132,6 +132,7 @@ func NewFromConfig(logger *logrus.Logger, conf Config) (*Server, error) {
 	ret.Hostname = conf.Hostname
 	ret.Tags = conf.Tags
 
+	OMG MAKE THIS A THING
 	mappedTags := make(map[string]string)
 	for _, tag := range ret.Tags {
 		splt := strings.SplitN(tag, ":", 2)

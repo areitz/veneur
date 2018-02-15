@@ -38,6 +38,19 @@ type DatadogMetricSink struct {
 	log             *logrus.Logger
 }
 
+// DDEvent represents the structure of datadog's undocumented /intake endpoint
+type DDEvent struct {
+	Title       string   `json:"msg_title"`
+	Text        string   `json:"msg_text"`
+	Timestamp   int64    `json:"timestamp,omitempty"` // represented as a unix epoch
+	Hostname    string   `json:"host,omitempty"`
+	Aggregation string   `json:"aggregation_key,omitempty"`
+	Priority    string   `json:"priority,omitempty"`
+	Source      string   `json:"source_type_name,omitempty"`
+	AlertLevel  string   `json:"alert_type,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
 // DDMetric is a data structure that represents the JSON that Datadog
 // wants when posting to the API
 type DDMetric struct {
@@ -48,6 +61,16 @@ type DDMetric struct {
 	Hostname   string        `json:"host,omitempty"`
 	DeviceName string        `json:"device_name,omitempty"`
 	Interval   int32         `json:"interval,omitempty"`
+}
+
+// DDServiceCheck is a representation of the service check.
+type DDServiceCheck struct {
+	Name      string   `json:"check"`
+	Status    int      `json:"status"`
+	Hostname  string   `json:"host_name"`
+	Timestamp int64    `json:"timestamp,omitempty"` // represented as a unix epoch
+	Tags      []string `json:"tags,omitempty"`
+	Message   string   `json:"message,omitempty"`
 }
 
 // NewDatadogMetricSink creates a new Datadog sink for trace spans.
@@ -110,6 +133,13 @@ func (dd *DatadogMetricSink) Flush(ctx context.Context, interMetrics []samplers.
 }
 
 func (dd *DatadogMetricSink) FlushEventsChecks(ctx context.Context, events []samplers.UDPEvent, checks []samplers.UDPServiceCheck) {
+	// For future serialization TKTKT Cory
+	// ret := &UDPEvent{
+	// 	Timestamp:  time.Now().Unix(),
+	// 	Priority:   "normal",
+	// 	AlertLevel: "info",
+	// }
+
 	span, _ := trace.StartSpanFromContext(ctx, "")
 	defer span.ClientFinish(dd.traceClient)
 
