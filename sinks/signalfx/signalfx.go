@@ -135,6 +135,9 @@ func (sfx *SignalFxSink) FlushOtherSamples(ctx context.Context, samples []ssf.SS
 			Category:   event.USERDEFINED,
 			Dimensions: dims,
 			Timestamp:  time.Unix(sample.Timestamp, 0),
+			Properties: map[string]interface{}{
+				"description": sample.Message,
+			},
 		}
 		sfx.client.AddEvents(ctx, []*event.Event{&ev})
 	}
