@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -132,16 +131,7 @@ func NewFromConfig(logger *logrus.Logger, conf Config) (*Server, error) {
 	ret.Hostname = conf.Hostname
 	ret.Tags = conf.Tags
 
-	OMG MAKE THIS A THING
-	mappedTags := make(map[string]string)
-	for _, tag := range ret.Tags {
-		splt := strings.SplitN(tag, ":", 2)
-		if len(splt) < 2 {
-			mappedTags[splt[0]] = ""
-		} else {
-			mappedTags[splt[0]] = splt[1]
-		}
-	}
+	mappedTags := parser.ParseTagSliceToMap(ret.Tags)
 
 	ret.synchronizeInterval = conf.SynchronizeWithInterval
 

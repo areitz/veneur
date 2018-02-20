@@ -105,11 +105,30 @@ func (sfx *SignalFxSink) Flush(ctx context.Context, interMetrics []samplers.Inte
 }
 
 // FlushEventsChecks sends events to SignalFx. It does not support checks. It is also currently disabled.
-func (sfx *SignalFxSink) FlushEventsChecks(ctx context.Context, events []samplers.UDPEvent, checks []samplers.UDPServiceCheck) {
+func (sfx *SignalFxSink) FlushOtherSamples(ctx context.Context, samples []ssf.SSFSample) {
 	span, _ := trace.StartSpanFromContext(ctx, "")
 	defer span.ClientFinish(sfx.traceClient)
 
-	for _, udpEvent := range events {
+	for _, sample := range samples {
+
+		if _, ok := sample.Tags[samplers.DogStatsDEventIdentifierKey]; !ok {
+			// This isn't an event, just continue
+			continue
+		}
+
+		// Defensively copy tags
+		dims := map[string]string{}
+		for k, v := range sample.Tags {
+			if k == samplers.DogStatsDEventIdentifierKey {
+				// Don't copy this tag
+				continue
+			}
+			dims[k] = v
+		}
+		// Copy common dimensions in
+		for k, v := range sfx.commonDimensions {
+			dims[k] = v
+		}
 
 		// TODO: SignalFx wants `map[string]string` for tags but at this point we're
 		// getting []string. We should fix this, as it feels less icky for sinks to
@@ -124,10 +143,6 @@ func (sfx *SignalFxSink) FlushEventsChecks(ctx context.Context, events []sampler
 			} else {
 				dims[parts[0]] = parts[1]
 			}
-		}
-		// Copy common dimensions in
-		for k, v := range sfx.commonDimensions {
-			dims[k] = v
 		}
 
 		ev := event.Event{

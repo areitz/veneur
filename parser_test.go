@@ -624,6 +624,14 @@ func TestConsecutiveParseSSF(t *testing.T) {
 	assert.Equal(t, "", span2.Tags["foo"], "Tagless span has tags!")
 }
 
+func TestTagSliceToMap(b *testing.T) {
+	tags := []string{"foo:bar", "baz:gorch", "blerg"}
+	mappedTags := parser.ParseTagSliceToMap(tags)
+	assert.Equal(t, "bar", mappedTags["foo"])
+	assert.Equal(t, "baz", mappedTags["gorch"])
+	assert.Equal(t, "", mappedTags["blerg"])
+}
+
 func BenchmarkParseSSF(b *testing.B) {
 	span := &ssf.SSFSpan{}
 

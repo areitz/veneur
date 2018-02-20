@@ -14,8 +14,12 @@ import (
 	"github.com/stripe/veneur/ssf"
 )
 
-const DogStatsDEventHostnameTagKey = "dogstatsd_hostname"
+const DogStatsDCheckIdentifierKey = "dogstatsd_sc"
+const DogStatsDCheckHostnameTagKey = "dogstatsd_hostname"
 const DogStatsDEventAggregationKeyTagKey = "dogstatsd_ak"
+const DogStatsDEventAlertTypeTagKey = "dogstatsd_at"
+const DogStatsDEventHostnameTagKey = "dogstatsd_hostname"
+const DogStatsDEventIdentifierKey = "dogstatsd_ev"
 const DogStatsDEventPriorityTagKey = "dogstatsd_pri"
 const DogStatsDEventSourceTypeTagKey = "dogstatsd_st"
 
@@ -337,10 +341,11 @@ func ParseMetric(packet []byte) (*UDPMetric, error) {
 }
 
 // ParseEvent parses a packet that represents a UDPEvent.
-func ParseEvent(packet []byte) (*UDPEvent, error) {
+func ParseEvent(packet []byte) (*ssf.SSFSample, error) {
 
-	ret := &SSFSample{
+	ret := &ssf.SSFSample{
 		Timestamp: time.Now().Unix(),
+		Tags:      map[string]string{DogStatsDEventIdentifierKey: ""},
 	}
 
 	pipeSplitter := NewSplitBytes(packet, '|')
@@ -445,14 +450,17 @@ func ParseEvent(packet []byte) (*UDPEvent, error) {
 			if foundSource == true {
 				return nil, errors.New("Invalid event packet, multiple source sections")
 			}
-			ret.Source = string(pipeSplitter.Chunk()[2:])
+			ret.Tags[DogStatsDEventSourceTypeTagKey] = string(pipeSplitter.Chunk()[2:])
 			foundSource = true
 		case bytes.HasPrefix(pipeSplitter.Chunk(), []byte{'t', ':'}):
 			if foundAlert == true {
 				return nil, errors.New("Invalid event packet, multiple alert sections")
 			}
-			ret.AlertLevel = string(pipeSplitter.Chunk()[2:])
-			if ret.AlertLevel != "error" && ret.AlertLevel != "warning" && ret.AlertLevel != "info" && ret.AlertLevel != "success" {
+			ret.Tags[DogStatsDEventAlertTypeTagKey] = string(pipeSplitter.Chunk()[2:])
+			if ret.Tags[DogStatsDEventAlertTypeTagKey] != "error" &&
+				ret.Tags[DogStatsDEventAlertTypeTagKey] != "warning" &&
+				ret.Tags[DogStatsDEventAlertTypeTagKey] != "info" &&
+				ret.Tags[DogStatsDEventAlertTypeTagKey] != "success" {
 				return nil, errors.New("Invalid event packet, alert level must be error, warning, info or success")
 			}
 			foundAlert = true
@@ -461,7 +469,11 @@ func ParseEvent(packet []byte) (*UDPEvent, error) {
 				return nil, errors.New("Invalid event packet, multiple tag sections")
 			}
 			tags := strings.Split(string(pipeSplitter.Chunk()[1:]), ",")
-			ret.Tags = tags // no need to sort, we don't aggregate on this
+			mappedTags := ParseTagSliceToMap(tags)
+			// We've already added some tags, so we'll just add these to the ones we've got.
+			for k, v := range mappedTags {
+				ret.Tags[k] = v
+			}
 		default:
 			return nil, errors.New("Invalid event packet, unrecognized metadata section")
 		}
@@ -471,9 +483,11 @@ func ParseEvent(packet []byte) (*UDPEvent, error) {
 }
 
 // ParseServiceCheck parses a packet that represents a UDPServiceCheck.
-func ParseServiceCheck(packet []byte) (*UDPServiceCheck, error) {
-	ret := &UDPServiceCheck{
+func ParseServiceCheck(packet []byte) (*ssf.SSFSample, error) {
+
+	ret := &ssf.SSFSample{
 		Timestamp: time.Now().Unix(),
+		Tags:      map[string]string{DogStatsDCheckIdentifierKey: ""},
 	}
 
 	pipeSplitter := NewSplitBytes(packet, '|')
@@ -496,13 +510,13 @@ func ParseServiceCheck(packet []byte) (*UDPServiceCheck, error) {
 	}
 	switch {
 	case bytes.Equal(pipeSplitter.Chunk(), []byte{'0'}):
-		ret.Status = 0
+		ret.Status = ssf.SSFSample_OK
 	case bytes.Equal(pipeSplitter.Chunk(), []byte{'1'}):
-		ret.Status = 1
+		ret.Status = ssf.SSFSample_WARNING
 	case bytes.Equal(pipeSplitter.Chunk(), []byte{'2'}):
-		ret.Status = 2
+		ret.Status = ssf.SSFSample_CRITICAL
 	case bytes.Equal(pipeSplitter.Chunk(), []byte{'3'}):
-		ret.Status = 3
+		ret.Status = ssf.SSFSample_UNKNOWN
 	default:
 		return nil, errors.New("Invalid service check packet, must have status of 0, 1, 2, or 3")
 	}
@@ -535,7 +549,7 @@ func ParseServiceCheck(packet []byte) (*UDPServiceCheck, error) {
 			if foundHostname || foundMessage {
 				return nil, errors.New("Invalid service check packet, multiple hostname sections")
 			}
-			ret.Hostname = string(pipeSplitter.Chunk()[2:])
+			ret.Tags[DogStatsDCheckHostnameTagKey] = string(pipeSplitter.Chunk()[2:])
 			foundHostname = true
 		case bytes.HasPrefix(pipeSplitter.Chunk(), []byte{'m', ':'}):
 			// this section must come last, so its flag also gets checked by
@@ -550,11 +564,29 @@ func ParseServiceCheck(packet []byte) (*UDPServiceCheck, error) {
 				return nil, errors.New("Invalid service check packet, multiple tag sections")
 			}
 			tags := strings.Split(string(pipeSplitter.Chunk()[1:]), ",")
-			ret.Tags = tags // no need to sort, we don't aggregate on this
+			mappedTags := ParseTagSliceToMap(tags)
+			for k, v := range mappedTags {
+				ret.Tags[k] = v
+			}
 		default:
 			return nil, errors.New("Invalid service check packet, unrecognized metadata section")
 		}
 	}
 
 	return ret, nil
+}
+
+// ParseTagSliceToMap handles splitting a slice of string tags on `:` and
+// creating a map from the parts.
+func ParseTagSliceToMap(tags []string) map[string]string {
+	mappedTags := make(map[string]string)
+	for _, tag := range tags {
+		splt := strings.SplitN(tag, ":", 2)
+		if len(splt) < 2 {
+			mappedTags[splt[0]] = ""
+		} else {
+			mappedTags[splt[0]] = splt[1]
+		}
+	}
+	return mappedTags
 }
