@@ -130,26 +130,11 @@ func (sfx *SignalFxSink) FlushOtherSamples(ctx context.Context, samples []ssf.SS
 			dims[k] = v
 		}
 
-		// TODO: SignalFx wants `map[string]string` for tags but at this point we're
-		// getting []string. We should fix this, as it feels less icky for sinks to
-		// get `map[string]string`.
-		dims := map[string]string{}
-		// Set the hostname as a tag, since SFx doesn't have a first-class hostname field
-		dims[sfx.hostnameTag] = sfx.hostname
-		for _, tag := range udpEvent.Tags {
-			parts := strings.SplitN(tag, ":", 2)
-			if len(parts) == 1 {
-				dims[parts[0]] = ""
-			} else {
-				dims[parts[0]] = parts[1]
-			}
-		}
-
 		ev := event.Event{
-			EventType:  udpEvent.Title,
+			EventType:  sample.Name,
 			Category:   event.USERDEFINED,
 			Dimensions: dims,
-			Timestamp:  time.Unix(udpEvent.Timestamp, 0),
+			Timestamp:  time.Unix(sample.Timestamp, 0),
 		}
 		sfx.client.AddEvents(ctx, []*event.Event{&ev})
 	}
